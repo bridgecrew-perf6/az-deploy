@@ -1,0 +1,75 @@
+name: Build and deploy Python app to Azure Web App v1
+   
+on:
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+    inputs:
+      name:
+        type: choice
+        description: Azure Function App
+        options: 
+        - App1
+        - App2
+      message:
+        required: true
+
+env:
+  AZURE_WEBAPP_NAME_1: func-kr-shirlei   # set this to your application's name
+  AZURE_WEBAPP_NAME_2: func-kr-shirlei-2
+  AZURE_FUNCTIONAPP_PACKAGE_PATH_1: 'FApp1/.'
+  AZURE_FUNCTIONAPP_PACKAGE_PATH_2: 'FApp2/.'
+  PYTHON_VERSION: '3.8'               # set this to the Python version to use
+
+      
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 'Checkout GitHub Action'
+        uses: actions/checkout@v2
+
+      - name: Setup Python ${{ env.PYTHON_VERSION }} Environment
+        uses: actions/setup-python@v1
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies 1
+        shell: bash
+        run: |
+          pushd './${{ env.AZURE_FUNCTIONAPP_PACKAGE_PATH_1 }}'
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt --target=".python_packages/lib/site-packages"
+          popd
+          
+      - name: 'Deploy to Azure Web App 1 agr vai'
+        uses: azure/functions-action@v1
+        with:
+          app-name: ${{ env.AZURE_WEBAPP_NAME_1 }}
+          package: ${{ env.AZURE_FUNCTIONAPP_PACKAGE_PATH_1 }}
+          publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE_1 }} 
+          
+      - name: 'Checkout GitHub Action 2'
+        uses: actions/checkout@v2
+
+      - name: Setup Python ${{ env.PYTHON_VERSION }} Environment
+        uses: actions/setup-python@v1
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          
+      - name: Install dependencies 2
+        shell: bash
+        run: |
+          pushd './${{ env.AZURE_FUNCTIONAPP_PACKAGE_PATH_2 }}'
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt --target=".python_packages/lib/site-packages"
+          popd
+
+      - name: 'Deploy to Azure Web App 2'
+        id: deploy-to-webapp-2
+        uses: azure/functions-action@v1
+        with:
+          app-name: ${{ env.AZURE_WEBAPP_NAME_2 }}
+          package: ${{ env.AZURE_FUNCTIONAPP_PACKAGE_PATH_2 }}
+          publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE_2 }}

@@ -1,0 +1,31 @@
+{
+    "folders": [
+        {
+            "name": "multiroot",
+            "path": "."
+        },
+        {
+            "name": "FApp1",
+            "path": "FApp1"
+        },
+        {
+            "name": "FApp2",
+            "path": "FApp2"
+        }
+    ],
+    "settings": {
+        "debug.internalConsoleOptions": "neverOpen"
+    },
+    "launch": {
+        "configurations": [],
+        "compounds": [
+            {
+                "name": "Attach to both apps",
+                "configurations": [
+                    "Attach to FApp1",
+                    "Attach to FApp2"
+                ]
+            }
+        ]
+    }
+}
