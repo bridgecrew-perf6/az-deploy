@@ -1,0 +1,140 @@
+name: AppleDistribution
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_name_input:
+        description: "The name of the target => WhiteLabel"
+        required: true
+      version_number_input:
+        description: "The version number for the release => X.Y"
+        required: true
+      build_number_input: 
+        description: "The build number for the release => Z"
+        required: true
+      should_run_test_input:
+        description: "Whether or not TESTS (Unit/UI) will be run => true/false"
+        required: true
+        default: "true"
+      test_devices_input:
+        description: "Coma separated list of simulators to run the tests => iPhone 12 Pro,iPhone 8"
+        required: true
+        default: "iPhone 12 Pro"
+      should_deploy_input:
+        description: "Whether or not the product will be deployed to AppStoreConnect => true/false"
+        required: true
+        default: "true"
+      deploy_type_input:
+        description: "The type of deploy: appstore/adhoc"
+        required: true
+        default: "appstore"
+      build_test_info_input:
+        description: "Description of what's new"
+        required: false
+        default: "Bug fixes"
+
+env:
+  TARGET: ${{ github.event.inputs.target_name_input }}
+  VERSION_NUMBER: ${{ github.event.inputs.version_number_input }}
+  BUILD_NUMBER: ${{ github.event.inputs.build_number_input }}
+  SHOULD_RUN_TEST: ${{ github.event.inputs.should_run_test_input }}
+  TEST_DEVICES: ${{ github.event.inputs.test_devices_input }}
+  SHOULD_DEPLOY: ${{ github.event.inputs.should_deploy_input }}
+  DEPLOY_TYPE: ${{ github.event.inputs.deploy_type_input }}
+  BUILD_TEST_INFO: ${{ github.event.inputs.build_test_info_input }}
+  CI_APPLE_USER: ${{ secrets.CI_APPLE_USER }}
+  CI_APPLE_PASSWORD: ${{ secrets.CI_APPLE_PASSWORD }}
+  CI_APPLE_APP_PASSWORD: ${{ secrets.CI_APPLE_APP_PASSWORD }}
+  CI_MATCH_PASSWORD: ${{ secrets.CI_MATCH_PASSWORD }}
+  S3_MATCH_BUCKET: ${{ secrets.S3_MATCH_BUCKET }}
+  S3_MATCH_REGION: ${{ secrets.S3_MATCH_REGION }}
+  S3_MATCH_ACCESS_KEY: ${{ secrets.S3_MATCH_ACCESS_KEY }}
+  S3_MATCH_SECRET_ACCESS_KEY: ${{ secrets.S3_MATCH_SECRET_ACCESS_KEY }}
+
+jobs:
+  welcome:
+    name: Welcome
+    runs-on: macos-11
+    steps:
+      - name: Log inputs and variables
+        run: |
+          echo "SYSTEM:"
+          sw_vers
+          uname -m
+          echo -e "\nXCODE VERSION"
+          /usr/bin/xcodebuild -version
+          echo -e "\nINPUT ARGUMENTS:"
+          echo -e "\tTARGET: $TARGET\n\tVERSION_NUMBER: $VERSION_NUMBER\n\tBUILD_NUMBER: $BUILD_NUMBER\n\tSHOULD_RUN_TEST: $SHOULD_RUN_TEST\n\tTEST_DEVICES: $TEST_DEVICES\n\tSHOULD_DEPLOY: $SHOULD_DEPLOY\n\tDEPLOY_TYPE: $DEPLOY_TYPE\n\tBUILD_TEST_INFO: $BUILD_TEST_INFO"
+          echo -e "\nSECRET ARGUMENTS:"
+          echo -e "\tCI_APPLE_USER: $CI_APPLE_USER\n\tCI_APPLE_PASSWORD: $CI_APPLE_PASSWORD\n\tCI_APPLE_APP_PASSWORD$CI_APPLE_APP_PASSWORD\n\tCI_MATCH_PASSWORD: $CI_MATCH_PASSWORD\n\tS3_MATCH_BUCKET: $S3_MATCH_BUCKET\n\tS3_MATCH_REGION: $S3_MATCH_REGION\n\tS3_MATCH_ACCESS_KEY: $S3_MATCH_ACCESS_KEY\n\tS3_MATCH_SECRET_ACCESS_KEY: $S3_MATCH_SECRET_ACCESS_KEY"
+          sleep 1
+  installer:
+    name: Dependencies Installer
+    needs: welcome
+    runs-on: macos-11
+    steps:
+      - name: Git LFS
+        run: |
+          if brew ls --versions git-lfs; then brew upgrade git-lfs; else brew install git-lfs; fi
+      - name: Fastlane
+        run: |
+          if brew ls --versions fastlane; then brew upgrade fastlane; else brew install fastlane; fi
+  tests:
+    name: Test
+    needs: installer
+    runs-on: macos-11
+    steps:
+      - uses: actions/checkout@v2
+      - name: Install Bundle
+        run: |
+          bundle install
+          bundle update fastlane
+      - name: Clean up and install dependencies
+        run: |
+          echo "Hello"
+      - name: CIM Tests
+        run: |
+          cd CIManager
+          ruby cim_manager.rb test  \
+          --target=$TARGET \
+          --devices="$TEST_DEVICES"
+  deploy:
+    name: Deployment
+    if: ${{ github.event.inputs.should_deploy_input == 'true' }} # Also tried github.env.SHOULD_DEPLOY == 'true'
+    needs: tests
+    runs-on: macos-11
+    steps:
+      - uses: actions/checkout@v2
+      - name: Install Bundle
+        run: |
+          bundle install
+          bundle update fastlane
+      - name: Clean up and install dependencies
+        run: |
+          rm -rf ~/Library/Developer/Xcode/DerivedData
+          echo "Rebuilding Cocoapods"
+          rm -rf Pods
+          rm Podfile.lock
+          pod repo update
+          pod install
+          echo "Rebuilding Carthage"
+          rm Cartfile.resolved
+          rm -rf Carthage
+          carthage update --use-xcframeworks
+      - name: CIM Deployment
+        run: |
+          cd CIManager
+          ruby cim_manager.rb deploy \
+          --target=$TARGET \
+          --version=$VERSION_NUMBER \
+          --build=$BUILD_NUMBER \
+          --configuration=Release \
+          --deploy_type=$DEPLOY_TYPE \
+          --user_name=$CI_APPLE_USER \
+          --user_password=CI_APPLE_PASSWORD \
+          --match_password=$CI_MATCH_PASSWORD \
+          --s3_match_bucket=$S3_MATCH_BUCKET \
+          --s3_match_region=$S3_MATCH_REGION \
+          --s3_match_access_key=$S3_MATCH_ACCESS_KEY \
+          --s3_match_secret_access_key=$S3_MATCH_SECRET_ACCESS_KEY \
+          --build_test_info="$BUILD_TEST_INFO"
